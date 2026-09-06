@@ -22,7 +22,7 @@ func TestTelegramClientGoesDirectWithoutProxy(t *testing.T) {
 		t.Fatalf("без SOCKS5 подставлен транспорт %T", c.Transport)
 	}
 	if c.Timeout != 5*time.Second {
-		t.Errorf("таймаут = %v", c.Timeout)
+		t.Errorf("тайм-аут = %v", c.Timeout)
 	}
 }
 

@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func TestVerifyAcceptsValidToken(t *testing.T) {
 
 func TestVerifyRejectsEmptyToken(t *testing.T) {
 	v, _ := newVerifier(t)
-	if _, err := v.Verify(""); err != auth.ErrNoToken {
+	if _, err := v.Verify(""); !errors.Is(err, auth.ErrNoToken) {
 		t.Fatalf("ожидалась ErrNoToken, получено %v", err)
 	}
 }

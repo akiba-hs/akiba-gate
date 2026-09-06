@@ -178,6 +178,11 @@ func (r *Reconciler) Run(ctx context.Context) {
 		}
 
 		switch status {
+		case tgnotify.MembershipUnknown:
+			// Состав чата выяснить не удалось. Молча пропускаем: удалять по
+			// незнанию нельзя, а обновлять — нечем.
+			continue
+
 		case tgnotify.MembershipOut:
 			if r.Protected[resident.TelegramID] {
 				r.Log.Warn("резидент отсутствует в чате, но защищён конфигурацией — оставлен",

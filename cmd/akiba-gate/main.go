@@ -51,7 +51,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "akiba-gate: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "akiba-gate: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -77,7 +77,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Клиент общего назначения: следует за редиректами, годится для API.
 	apiClient := &http.Client{Timeout: cfg.Timeout}
@@ -219,7 +219,7 @@ func run() error {
 			Hosts:    hosts,
 			Log:      log,
 		},
-		// Прокси Jellyfin намеренно не использует apiClient: его таймаут
+		// Прокси Jellyfin намеренно не использует apiClient: его тайм-аут
 		// в 15 секунд оборвал бы просмотр видео на первой же паузе буфера.
 		JellyfinProxy:    jellyfin.NewProxy(cfg.JellyfinBasePath, cfg.JellyfinInternalURL, log),
 		JellyfinBasePath: cfg.JellyfinBasePath,

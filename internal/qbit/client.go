@@ -1,4 +1,4 @@
-// Пакет qbit — клиент WebUI API qBittorrent и обратный прокси к нему.
+// Package qbit — клиент WebUI API qBittorrent и обратный прокси к нему.
 //
 // Аккаунт в qBittorrent один на всех резидентов (так решено в требованиях),
 // поэтому шлюз держит одну служебную сессию и подставляет её в запросы уже
@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/akiba-hs/akiba-gate/internal/upstream"
 )
 
 // Client — минимальный клиент WebUI API.
@@ -44,7 +46,7 @@ type Client struct {
 const loginBackoff = 30 * time.Second
 
 // loginTimeout ограничивает вход, отвязанный от контекста запроса.
-// Без собственного срока такой вход висел бы до таймаута транспорта, держа
+// Без собственного срока такой вход висел бы до тайм-аута транспорта, держа
 // мьютекс и все параллельные запросы за ним.
 const loginTimeout = 15 * time.Second
 
@@ -165,7 +167,7 @@ func (c *Client) loginLocked(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("qbit: логин: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 
 	if resp.StatusCode == http.StatusForbidden {
@@ -188,12 +190,7 @@ func (c *Client) loginLocked(ctx context.Context) (string, error) {
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	u := *c.base
-	if i := strings.IndexByte(path, '?'); i >= 0 {
-		u.Path, u.RawQuery = c.base.Path+path[:i], path[i+1:]
-	} else {
-		u.Path = c.base.Path + path
-	}
+	u := upstream.RequestURL(c.base, path)
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, fmt.Errorf("qbit: сборка запроса: %w", err)
@@ -224,7 +221,7 @@ func (c *Client) doAuthorized(ctx context.Context, path string) ([]byte, error) 
 			return nil, fmt.Errorf("qbit: запрос %s: %w", path, err)
 		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			return nil, fmt.Errorf("qbit: чтение ответа %s: %w", path, readErr)
 		}

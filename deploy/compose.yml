@@ -27,8 +27,10 @@ services:
       - coolify
     healthcheck:
       # В distroless нет шелла и curl, поэтому проверку живости делает
-      # сам Traefik/Coolify по HTTP. Здесь оставлена отключённой осознанно.
-      disable: true
+      # сам Traefik/Coolify по HTTP. Здесь она отключена осознанно.
+      # ["NONE"] — записанное по спецификации Compose отключение проверки,
+      # ровно то же самое, что disable: true.
+      test: ["NONE"]
     # Маршруты описаны не метками, а файлом deploy/traefik/akiba.yaml:
     # часть роутеров относится к сервисам, которыми Coolify не управляет
     # (Jellyfin и Nextcloud подняты отдельно), и держать их вместе понятнее.

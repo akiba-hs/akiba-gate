@@ -132,7 +132,7 @@
                с нуля, и утечки нет по построению. -->
           <div class="avatar" id="avatar">
             <img src="{{.PhotoURL}}" alt="" width="52" height="52"
-                 {{if not .PhotoProxied}}referrerpolicy="no-referrer"{{end}}>
+                 {{if not .PhotoProxied}}referrerpolicy="no-referrer" {{end}}>
           </div>
         {{end}}
         <div>
@@ -150,9 +150,9 @@
     // кроме скрипта, и при выключенном JS страница осталась бы с вечно
     // мерцающим кружком вместо загрузившейся аватарки.
     (function () {
-      var box = document.getElementById('avatar');
+      const box = document.getElementById('avatar');
       if (!box) { return; }
-      var img = box.querySelector('img');
+      const img = box.querySelector('img');
       if (!img) { return; }
       // Картинка могла прийти из кэша ещё до этого скрипта. Проверяем именно
       // complete, без naturalWidth: у уже провалившейся загрузки события
@@ -160,7 +160,7 @@
       // никогда — остался бы вечно мерцающий кружок.
       if (img.complete) { return; }
       box.classList.add('pending');
-      var done = function () { box.classList.remove('pending'); };
+      const done = function () { box.classList.remove('pending'); };
       // Ошибку гасим так же: Telegram недоступен — лучше пустое место, чем
       // бесконечное ожидание.
       img.addEventListener('load', done);
@@ -195,8 +195,8 @@
       // когда возврат ушёл на чужой адрес. Значит достаточно спрашивать, не
       // появилась ли она, — и обновиться, как только вход состоялся.
       (function () {
-        var tries = 0;
-        var timer = setInterval(function () {
+        let tries = 0;
+        const timer = setInterval(function () {
           if (++tries > 150) { clearInterval(timer); return; } // ~5 минут
           fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' })
             .then(function (r) { return r.json(); })

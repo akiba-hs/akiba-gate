@@ -69,7 +69,10 @@ func newFakeJellyfin(t *testing.T, password string) (*fakeJellyfin, *url.URL) {
 }
 
 // newSSO собирает обработчик автовхода с политикой публичных хостов.
-func newSSO(t *testing.T, u *url.URL) *jellyfin.SSOHandler {
+//
+// Адрес Jellyfin сюда не передаётся: страница автовхода целиком собирается на
+// сервере и к самому Jellyfin не ходит — за неё это делает браузер.
+func newSSO(t *testing.T) *jellyfin.SSOHandler {
 	t.Helper()
 	base, err := url.Parse("https://inside.akiba.space")
 	if err != nil {
@@ -140,8 +143,7 @@ func TestClientRejectsWrongPassword(t *testing.T) {
 }
 
 func TestSSOHandlerRendersCredentialsAndRedirect(t *testing.T) {
-	_, u := newFakeJellyfin(t, "pass")
-	h := newSSO(t, u)
+	h := newSSO(t)
 
 	r := httptest.NewRequest(http.MethodGet, "/sso/jellyfin", nil)
 	r.Header.Set("X-Forwarded-Proto", "https")
@@ -182,7 +184,7 @@ func TestSSOHandlerRendersCredentialsAndRedirect(t *testing.T) {
 // контейнера браузер резидента никуда не попадёт.
 func TestSSOHandlerUsesPublicAddress(t *testing.T) {
 	_, u := newFakeJellyfin(t, "pass")
-	h := newSSO(t, u)
+	h := newSSO(t)
 	r := httptest.NewRequest(http.MethodGet, "/sso/jellyfin", nil)
 	r.Host = "inside.akiba.space"
 	w := httptest.NewRecorder()
@@ -198,8 +200,7 @@ func TestSSOHandlerUsesPublicAddress(t *testing.T) {
 // у него на сервере. Недоступность обнаружит уже браузер и покажет причину
 // прямо на этой странице, а не пустой 502 без объяснений.
 func TestSSOHandlerRendersWithoutTalkingToJellyfin(t *testing.T) {
-	dead, _ := url.Parse("http://127.0.0.1:1")
-	h := newSSO(t, dead)
+	h := newSSO(t)
 	w := httptest.NewRecorder()
 
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sso/jellyfin", nil))
@@ -213,8 +214,7 @@ func TestSSOHandlerRendersWithoutTalkingToJellyfin(t *testing.T) {
 // Подставленный Host отправил бы и запросы, и токен на хост злоумышленника,
 // поэтому адрес берётся только из проверенного origin.
 func TestSSOHandlerRejectsForeignHost(t *testing.T) {
-	_, u := newFakeJellyfin(t, "pass")
-	h := newSSO(t, u)
+	h := newSSO(t)
 
 	r := httptest.NewRequest(http.MethodGet, "/sso/jellyfin", nil)
 	r.Header.Set("X-Forwarded-Host", "evil.example")
@@ -235,8 +235,7 @@ func TestSSOHandlerRejectsForeignHost(t *testing.T) {
 // Из локальной сети шлюз открывают по http; подмена схемы на https увела бы
 // веб-клиент Jellyfin на другой origin и сломала бы его запросы.
 func TestSSOHandlerKeepsRequestScheme(t *testing.T) {
-	_, u := newFakeJellyfin(t, "pass")
-	h := newSSO(t, u)
+	h := newSSO(t)
 
 	r := httptest.NewRequest(http.MethodGet, "/sso/jellyfin", nil)
 	r.Header.Set("X-Forwarded-Host", "inside.akiba.space")

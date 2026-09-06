@@ -1,4 +1,4 @@
-// Пакет audit хранит состояние шлюза, которое обязано пережить перезапуск.
+// Package audit хранит состояние шлюза, которое обязано пережить перезапуск.
 //
 // Это список резидентов и выданные им права на сервисы. Список наполняется
 // входами (человек авторизовался — значит он есть), права раздаёт
@@ -81,7 +81,7 @@ func Open(path string) (*Store, error) {
 	// ошибок "database is locked".
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("audit: миграция схемы: %w", err)
 	}
 	return &Store{db: db, now: time.Now}, nil

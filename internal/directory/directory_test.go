@@ -268,7 +268,7 @@ func TestReconcilerNeverAddsAnyone(t *testing.T) {
 // Telegram вычистила бы из базы вообще всех.
 func TestReconcilerKeepsResidentOnError(t *testing.T) {
 	store := newStore(person("1", "alice"))
-	chat := &fakeChat{err: map[string]error{"1": errors.New("Telegram недоступен")}}
+	chat := &fakeChat{err: map[string]error{"1": errors.New("нет связи с Telegram")}}
 	r := directory.NewReconciler(store, chat, directory.NewRecorder(store, quiet()), nil, quiet())
 
 	r.Run(context.Background())

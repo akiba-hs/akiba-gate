@@ -56,7 +56,7 @@ func (p *proxyStub) serve() {
 }
 
 func (p *proxyStub) handle(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	head := make([]byte, 2)
 	if _, err := io.ReadFull(conn, head); err != nil {
 		return
@@ -117,7 +117,7 @@ func (p *proxyStub) handle(conn net.Conn) {
 	if err != nil {
 		return
 	}
-	defer upstream.Close()
+	defer func() { _ = upstream.Close() }()
 	go func() { _, _ = io.Copy(upstream, conn) }()
 	_, _ = io.Copy(conn, upstream)
 }
@@ -147,7 +147,7 @@ func TestDialerConnectsThroughProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("запрос через прокси: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	if string(body) != "привет" {
@@ -239,13 +239,13 @@ func TestDialerHandlesAllBoundAddressTypes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("слушатель: %v", err)
 			}
-			defer ln.Close()
+			defer func() { _ = ln.Close() }()
 			go func() {
 				conn, err := ln.Accept()
 				if err != nil {
 					return
 				}
-				defer conn.Close()
+				defer func() { _ = conn.Close() }()
 				head := make([]byte, 2)
 				_, _ = io.ReadFull(conn, head)
 				_, _ = io.ReadFull(conn, make([]byte, head[1]))
@@ -262,7 +262,7 @@ func TestDialerHandlesAllBoundAddressTypes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("подключение: %v", err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			rest, _ := io.ReadAll(conn)
 			if string(rest) != "хвост" {
 				t.Fatalf("после рукопожатия прочитано %q: адрес вычитан не полностью", rest)

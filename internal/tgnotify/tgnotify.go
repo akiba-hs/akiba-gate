@@ -1,4 +1,4 @@
-// Пакет tgnotify сообщает в групповой чат Telegram о добавленных торрентах.
+// Package tgnotify сообщает в групповой чат Telegram о добавленных торрентах.
 //
 // Устройство намеренно простое: один запрос sendMessage к Bot API через
 // обычный net/http, без клиентских библиотек. Всё, что нужно, — токен бота и
@@ -192,7 +192,7 @@ func (n *Notifier) send(ctx context.Context, chatID, text string, silent bool) e
 	if err != nil {
 		return fmt.Errorf("tgnotify: отправка сообщения: %s", n.redact(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("tgnotify: Telegram ответил %d: %s",
@@ -218,8 +218,7 @@ func (n *Notifier) redact(err error) string {
 	if err == nil {
 		return ""
 	}
-	var ue *url.Error
-	if errors.As(err, &ue) {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
 		// Копия: исходную ошибку портить нельзя, её мог сохранить вызывающий.
 		clean := *ue
 		clean.URL = n.api + "/bot…/sendMessage"
@@ -316,7 +315,7 @@ func (n *Notifier) ChatMember(ctx context.Context, telegramID string) (Membershi
 		return MembershipUnknown, ChatMemberProfile{},
 			fmt.Errorf("tgnotify: запрос состава чата: %s", n.redact(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 
 	var res struct {

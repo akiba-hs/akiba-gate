@@ -28,7 +28,7 @@ type OpenHandler struct {
 	Log    *slog.Logger
 }
 
-func (h *OpenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *OpenHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	// Страница персональная и ведёт к выдаче доступа: ни кэшировать её, ни
 	// индексировать нельзя.
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

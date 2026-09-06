@@ -127,7 +127,7 @@ func TestGuardAppliesReturnBase(t *testing.T) {
 
 // Форма запроса, которая на самом деле приходит за Traefik: X-Forwarded-Host
 // он ставит всегда, а X-Forwarded-Uri — только внутри подзапроса forwardAuth.
-// Пока ветка восстановления адреса ключалась на Host, она в проде не
+// Пока ветка восстановления адреса включалась на Host, она в проде не
 // срабатывала никогда: резидент после входа возвращался на портал вместо
 // страницы, куда шёл.
 func TestGuardKeepsDeepLinkBehindProxy(t *testing.T) {

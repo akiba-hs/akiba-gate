@@ -1,4 +1,4 @@
-// Пакет jellyfin выдаёт браузеру резидента готовую сессию Jellyfin, чтобы
+// Package jellyfin выдаёт браузеру резидента готовую сессию Jellyfin, чтобы
 // логин/пароль вводить не приходилось.
 //
 // По требованиям аккаунт в Jellyfin один общий на всех резидентов, поэтому
@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/akiba-hs/akiba-gate/internal/upstream"
 )
 
 // clientName и deviceID попадают в список активных устройств Jellyfin —
@@ -107,7 +109,7 @@ func (c *Client) validateLocked(ctx context.Context, s Session) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("jellyfin: проверка сессии: %w", err)
 	}
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK, nil
 }
 
@@ -127,7 +129,7 @@ func (c *Client) authenticateLocked(ctx context.Context) (Session, error) {
 	if err != nil {
 		return Session{}, fmt.Errorf("jellyfin: логин: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -150,14 +152,7 @@ func (c *Client) authenticateLocked(ctx context.Context) (Session, error) {
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	u := *c.base
-	// Строку запроса отделяем явно: иначе "?" уедет в путь и будет
-	// заэкранирован как %3F, а Jellyfin получит адрес, которого не знает.
-	if i := strings.IndexByte(path, '?'); i >= 0 {
-		u.Path, u.RawQuery = c.base.Path+path[:i], path[i+1:]
-	} else {
-		u.Path = c.base.Path + path
-	}
+	u := upstream.RequestURL(c.base, path)
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, fmt.Errorf("jellyfin: сборка запроса: %w", err)

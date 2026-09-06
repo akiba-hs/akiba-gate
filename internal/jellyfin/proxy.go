@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/akiba-hs/akiba-gate/internal/auth"
+	"github.com/akiba-hs/akiba-gate/internal/upstream"
 )
 
 // Proxy отдаёт веб-интерфейс Jellyfin под публичным префиксом шлюза.
@@ -200,7 +201,7 @@ func (p *Proxy) strip(path string) string {
 // на запрос корня. Без правки браузер ушёл бы на портал.
 func (p *Proxy) modifyResponse(resp *http.Response) error {
 	if loc := resp.Header.Get("Location"); loc != "" {
-		resp.Header.Set("Location", relocate(loc, p.basePath, p.target.Host))
+		resp.Header.Set("Location", upstream.Relocate(loc, p.basePath, p.target.Host))
 	}
 	return p.injectHashGuard(resp)
 }
@@ -299,38 +300,4 @@ func (p *Proxy) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusBadGateway)
 	_, _ = io.WriteString(w, "Jellyfin недоступен, попробуйте позже\n")
-}
-
-// relocate приводит Location из ответа сервиса к адресу шлюза.
-//
-// Сервис о префиксе не знает и отвечает, например, «Location: /web/» на
-// запрос корня. Хуже другой случай: с настроенной поддержкой обратного
-// прокси сервис отдаёт абсолютный адрес со своим внутренним хостом
-// («http://192.168.8.43:8096/web/»). Резидент из интернета такого хоста не
-// увидит вовсе, а сам адрес выдаёт устройство локальной сети — поэтому
-// внутренний хост заменяем на префикс шлюза.
-func relocate(loc, basePath, upstreamHost string) string {
-	if loc == "" || basePath == "" {
-		return loc
-	}
-	if strings.HasPrefix(loc, "/") {
-		if strings.HasPrefix(loc, basePath+"/") || loc == basePath {
-			return loc
-		}
-		return basePath + loc
-	}
-	u, err := url.Parse(loc)
-	if err != nil || u.Host == "" || u.Host != upstreamHost {
-		// Чужой хост не трогаем: это редирект наружу, и подменять его нельзя.
-		return loc
-	}
-	u.Scheme, u.Host = "", ""
-	rest := u.String()
-	if !strings.HasPrefix(rest, "/") {
-		rest = "/" + rest
-	}
-	if strings.HasPrefix(rest, basePath+"/") || rest == basePath {
-		return rest
-	}
-	return basePath + rest
 }

@@ -20,7 +20,3 @@ func (w *DownloadWatcher) SetClockForTest(now func() time.Time) {
 	w.now = now
 	w.mu.Unlock()
 }
-
-// MaxMissesForTest — сколько опросов подряд торрента может не быть в ответе
-// qBittorrent, прежде чем наблюдение снимается.
-const MaxMissesForTest = maxMisses

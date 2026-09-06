@@ -44,13 +44,13 @@ func TestOpenDropsLegacyTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	check, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatalf("проверочное открытие: %v", err)
 	}
-	defer check.Close()
+	defer func() { _ = check.Close() }()
 	for _, table := range []string{"torrent_events", "nextcloud_users"} {
 		var name string
 		err = check.QueryRow(

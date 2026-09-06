@@ -251,7 +251,7 @@ func TestLoadRejectsBadTimeout(t *testing.T) {
 	env := validEnv()
 	env["HTTP_TIMEOUT"] = "быстро"
 	if _, err := config.Load(loader(env)); err == nil {
-		t.Fatal("некорректный таймаут принят")
+		t.Fatal("некорректный тайм-аут принят")
 	}
 }
 

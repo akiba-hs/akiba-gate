@@ -34,8 +34,8 @@ func (f *fakeLister) TorrentsInfo(ctx context.Context) ([]qbit.TorrentInfo, erro
 	f.calls.Add(1)
 	n := f.inFlight.Add(1)
 	for {
-		max := f.maxInFlight.Load()
-		if n <= max || f.maxInFlight.CompareAndSwap(max, n) {
+		peak := f.maxInFlight.Load()
+		if n <= peak || f.maxInFlight.CompareAndSwap(peak, n) {
 			break
 		}
 	}

@@ -1,4 +1,4 @@
-// Пакет userpic отдаёт аватарки Telegram через шлюз.
+// Package userpic отдаёт аватарки Telegram через шлюз.
 //
 // Зачем прослойка, если картинка и так публичная. Причин две. Первая —
 // доступность: t.me у части резидентов не открывается, и портал получал
@@ -67,7 +67,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// негабаритного ответа — нет.
 	defer func() {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxSize))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {

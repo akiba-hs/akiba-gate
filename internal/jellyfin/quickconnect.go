@@ -55,7 +55,7 @@ func (c *Client) AuthorizeQuickConnect(ctx context.Context, code string) error {
 			return fmt.Errorf("jellyfin: подтверждение кода: %w", err)
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		switch resp.StatusCode {
 		case http.StatusOK:

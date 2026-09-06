@@ -3,6 +3,7 @@ package jellyfin_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -129,7 +130,7 @@ func TestAuthorizeQuickConnectReportsUnknownCode(t *testing.T) {
 	c := b.client(t)
 
 	err := c.AuthorizeQuickConnect(context.Background(), "000000")
-	if err != jellyfin.ErrQuickConnectCodeUnknown {
+	if !errors.Is(err, jellyfin.ErrQuickConnectCodeUnknown) {
 		t.Fatalf("ошибка = %v, ожидалась ErrQuickConnectCodeUnknown", err)
 	}
 }
@@ -388,12 +389,12 @@ func TestQuickConnectFlowThroughProxy(t *testing.T) {
 	proxy := jellyfin.NewProxy("/jellyfin", target, log)
 	approve := &jellyfin.QuickConnectAPI{Client: b.client(t), Hosts: hosts, Log: log}
 
-	клиент := `MediaBrowser Client="Jellyfin Web", Device="Browser", DeviceId="d1", Version="10.11.11"`
+	clientHeader := `MediaBrowser Client="Jellyfin Web", Device="Browser", DeviceId="d1", Version="10.11.11"`
 
 	// 1. Браузер запрашивает код через прокси.
 	r := httptest.NewRequest(http.MethodPost, "http://inside.akiba.space:8080/jellyfin/QuickConnect/Initiate", nil)
 	r.Host = "inside.akiba.space:8080"
-	r.Header.Set("Authorization", клиент)
+	r.Header.Set("Authorization", clientHeader)
 	w := httptest.NewRecorder()
 	proxy.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -419,7 +420,7 @@ func TestQuickConnectFlowThroughProxy(t *testing.T) {
 		"http://inside.akiba.space:8080/jellyfin/Users/AuthenticateWithQuickConnect",
 		strings.NewReader(`{"Secret":"`+qc.Secret+`"}`))
 	r.Host = "inside.akiba.space:8080"
-	r.Header.Set("Authorization", клиент)
+	r.Header.Set("Authorization", clientHeader)
 	r.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	proxy.ServeHTTP(w, r)

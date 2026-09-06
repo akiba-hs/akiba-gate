@@ -167,7 +167,7 @@ func TestParseAddRequestCapsNumberOfRefs(t *testing.T) {
 		if i > 0 {
 			b.WriteString("%0A")
 		}
-		fmt.Fprintf(&b, "magnet:?xt=urn:btih:%040x", i)
+		_, _ = fmt.Fprintf(&b, "magnet:?xt=urn:btih:%040x", i)
 	}
 
 	refs, err := torrent.ParseAddRequest("application/x-www-form-urlencoded", []byte(b.String()))

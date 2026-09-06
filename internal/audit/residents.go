@@ -83,7 +83,7 @@ ORDER BY first_name COLLATE NOCASE, last_name COLLATE NOCASE, username COLLATE N
 	if err != nil {
 		return nil, fmt.Errorf("audit: выборка резидентов: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []Resident
 	index := make(map[string]int)
@@ -113,7 +113,7 @@ ORDER BY first_name COLLATE NOCASE, last_name COLLATE NOCASE, username COLLATE N
 	if err != nil {
 		return nil, fmt.Errorf("audit: выборка прав: %w", err)
 	}
-	defer grants.Close()
+	defer func() { _ = grants.Close() }()
 	for grants.Next() {
 		var id, service string
 		if err := grants.Scan(&id, &service); err != nil {
@@ -137,7 +137,7 @@ func (s *Store) ResidentServices(ctx context.Context, telegramID string) ([]stri
 	if err != nil {
 		return nil, fmt.Errorf("audit: выборка прав: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []string
 	for rows.Next() {
