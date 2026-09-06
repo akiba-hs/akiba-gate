@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+    <id>akibasso</id>
+    <name>Akiba SSO</name>
+    <summary>Вход резидентов Akiba по одноразовому коду от шлюза</summary>
+    <description><![CDATA[
+Адаптер между Nextcloud и akiba-gate. Делает ровно три вещи: обменивает
+одноразовый код на личность (запрос к шлюзу с общим секретом), заводит
+пользователя, если его ещё нет, и открывает ему сессию средствами самого
+Nextcloud.
+
+Пароль пользователя приложение не знает, не хранит и не передаёт. Человек
+волен задать и менять его сам — на вход по коду это не влияет никак.
+    ]]></description>
+    <version>1.0.0</version>
+    <licence>agpl</licence>
+    <author>akiba-hs</author>
+    <namespace>AkibaSso</namespace>
+    <category>security</category>
+    <dependencies>
+        <nextcloud min-version="27" max-version="32"/>
+    </dependencies>
+</info>

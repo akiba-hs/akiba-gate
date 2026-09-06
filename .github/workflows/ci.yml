@@ -1,0 +1,27 @@
+# Проверка кода на каждом пуше и запросе на слияние. Сборка образа и релиз —
+# в release.yml, они запускаются только по тегу версии.
+name: ci
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+      - name: Форматирование
+        run: make fmt-check
+      - name: go vet
+        run: make vet
+      - name: Тесты
+        run: make test
+      - name: Тесты под детектором гонок
+        run: make race

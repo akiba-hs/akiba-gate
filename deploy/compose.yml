@@ -1,0 +1,38 @@
+# Разворачивается как «Docker Compose»-ресурс в Coolify.
+#
+# Сеть: контейнер должен быть в той же docker-сети, что и Traefik от Coolify,
+# иначе middleware forwardAuth не достучится до http://akiba-gate:8080/verify.
+# Имя сети у Coolify — coolify (проверить: docker network ls).
+services:
+  akiba-gate:
+    image: ghcr.io/akiba-hs/akiba-gate:latest
+    container_name: akiba-gate
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Состояние: атрибуция добавленных торрентов.
+      # Каталог должен принадлежать uid 65532 (nonroot в distroless):
+      #   sudo install -d -o 65532 -g 65532 /data/akiba-gate
+      - /data/akiba-gate:/var/lib/akiba-gate
+      # Тексты интерфейса. В образ они намеренно не вшиты: смысл файла в том,
+      # чтобы править надписи без пересборки. Каталог монтируется целиком и
+      # на запись — шлюз восстанавливает файл, если тот испортили, и без
+      # права записи чинить будет нечем.
+      #
+      # Перед первым запуском положить туда deploy/i18n.ru.json:
+      #   sudo install -d -o 65532 -g 65532 /data/akiba-gate/i18n
+      #   sudo install -o 65532 -g 65532 deploy/i18n.ru.json /data/akiba-gate/i18n/
+      - /data/akiba-gate/i18n:/etc/akiba-gate
+    networks:
+      - coolify
+    healthcheck:
+      # В distroless нет шелла и curl, поэтому проверку живости делает
+      # сам Traefik/Coolify по HTTP. Здесь оставлена отключённой осознанно.
+      disable: true
+    # Маршруты описаны не метками, а файлом deploy/traefik/akiba.yaml:
+    # часть роутеров относится к сервисам, которыми Coolify не управляет
+    # (Jellyfin и Nextcloud подняты отдельно), и держать их вместе понятнее.
+
+networks:
+  coolify:
+    external: true

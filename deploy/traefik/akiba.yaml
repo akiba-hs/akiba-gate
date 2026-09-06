@@ -1,0 +1,261 @@
+# Динамическая конфигурация Traefik для доступа резидентов.
+#
+# Куда положить: /data/coolify/proxy/dynamic/akiba.yaml
+# (в интерфейсе Coolify: Server -> Proxy -> Dynamic Configurations).
+# Файл перечитывается на лету, перезапуск Traefik не нужен.
+#
+# Внутренние адреса сервисов вынесены в http.services внизу — правьте там.
+#
+# О приоритетах. В Traefik v3 приоритет по умолчанию равен ДЛИНЕ правила
+# (для Host(`nextcloud.akiba.space`) это 31). Поэтому все роутеры здесь имеют
+# явные значения в тысячах: иначе роутер, автоматически созданный Coolify для
+# того же хоста, молча выигрывал бы, и middleware отсюда не применялись бы —
+# без единой ошибки в логах. Перед установкой проверьте, что для этих хостов
+# нет других роутеров: `docker exec coolify-proxy traefik version` не покажет,
+# смотрите панель Traefik или `/data/coolify/proxy/dynamic/`.
+
+http:
+  middlewares:
+    # 1. Снимаем заголовки идентичности, пришедшие от клиента.
+    #    Пустое значение в customRequestHeaders означает «удалить заголовок».
+    #    Без этого шага любой желающий представится чужим резидентом.
+    akiba-strip-identity:
+      headers:
+        customRequestHeaders:
+          X-Akiba-Uid: ""
+          X-Akiba-User: ""
+          X-Akiba-Name: ""
+          X-Akiba-Telegram-Id: ""
+          X-Akiba-Resident: ""
+
+    # 2. Проверка JWT во внешнем сервисе.
+    akiba-auth:
+      forwardAuth:
+        address: "http://akiba-gate:8080/verify"
+        # trustForwardHeader намеренно НЕ включён: Traefik и так подставляет
+        # X-Forwarded-* сам, а с ним он начал бы пропускать заголовки клиента.
+        # Все решения о хосте (проверка адреса возврата, привязка SSO-хопа
+        # Nextcloud) принимаются по X-Forwarded-Host — доверять ему нельзя.
+        authResponseHeaders:
+          - X-Akiba-Uid
+          - X-Akiba-User
+          - X-Akiba-Name
+          - X-Akiba-Telegram-Id
+          - X-Akiba-Resident
+
+    # Порядок важен: сначала чистка, потом проверка.
+    akiba-guard:
+      chain:
+        middlewares:
+          - akiba-strip-identity
+          - akiba-auth
+
+    # Служебный /verify не должен быть доступен из интернета:
+    # Traefik ходит в него по внутреннему адресу, а не через этот роутер.
+    akiba-deny-public:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+
+    # Закрываем изменение общей учётной записи Jellyfin.
+    #
+    # Аккаунт один на всех, поэтому POST под /Users/ — это смена пароля или
+    # профиля сразу всем резидентам. Правило дублирует такую же проверку в
+    # самом шлюзе: Traefik закрывает путь и тогда, когда трафик к Jellyfin
+    # когда-нибудь пойдёт мимо шлюза.
+    #
+    # Один POST под /Users/ обязан проходить — им завершается автовход. Для
+    # него есть отдельный маршрут akiba-jellyfin-quickconnect с приоритетом
+    # выше, чем у запрещающего: см. ниже.
+    akiba-jellyfin-deny-users:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+
+    # Всё, что пришло по http не из локальной сети, уводим на https.
+    # Причина: кука авторизации выставлена auth-service без флага Secure
+    # (менять auth-service нельзя), поэтому по открытому http семидневный
+    # JWT ушёл бы через интернет в чистом виде.
+    akiba-https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+  routers:
+    # --- Портал inside.akiba.space -------------------------------------
+    # Три роутера на один хост:
+    #   * http из локальной сети  -> отдаём портал как есть (требование
+    #     «работает без интернета», ClientIP появился в Traefik v3);
+    #   * http из интернета       -> редирект на https, чтобы JWT не ходил
+    #     открытым текстом;
+    #   * https                   -> обычный доступ.
+    # Подсеть ниже правится под вашу локальную сеть.
+    akiba-portal-http-lan:
+      rule: "Host(`inside.akiba.space`) && ClientIP(`192.168.8.0/24`)"
+      entryPoints: [http]
+      middlewares: [akiba-strip-identity]
+      service: akiba-gate
+      priority: 1200
+
+    akiba-portal-http-public:
+      rule: "Host(`inside.akiba.space`)"
+      entryPoints: [http]
+      middlewares: [akiba-https-redirect]
+      service: akiba-gate
+      priority: 1100
+
+    akiba-portal-https:
+      rule: "Host(`inside.akiba.space`)"
+      entryPoints: [https]
+      middlewares: [akiba-strip-identity]
+      service: akiba-gate
+      priority: 1000
+      tls:
+        certResolver: letsencrypt
+
+    # Закрываем /verify снаружи.
+    akiba-verify-block-http:
+      rule: "Host(`inside.akiba.space`) && Path(`/verify`)"
+      entryPoints: [http]
+      service: akiba-gate
+      middlewares: [akiba-deny-public]
+      priority: 3000
+
+    akiba-verify-block-https:
+      rule: "Host(`inside.akiba.space`) && Path(`/verify`)"
+      entryPoints: [https]
+      service: akiba-gate
+      middlewares: [akiba-deny-public]
+      priority: 3000
+      tls:
+        certResolver: letsencrypt
+
+    # Закрываем /nextcloud/redeem снаружи — по той же причине, что и /verify.
+    #
+    # Это служебный адрес: по нему приложение внутри Nextcloud обменивает
+    # одноразовый код на личность, и обращается к нему сервер, а не браузер.
+    # Ходит он на внутренний адрес шлюза, поэтому публичный маршрут не нужен
+    # ничему легитимному — а снаружи он давал бы возможность без помех
+    # подбирать общий секрет.
+    akiba-redeem-block-http:
+      rule: "Host(`inside.akiba.space`) && Path(`/nextcloud/redeem`)"
+      entryPoints: [http]
+      service: akiba-gate
+      middlewares: [akiba-deny-public]
+      priority: 3000
+
+    akiba-redeem-block-https:
+      rule: "Host(`inside.akiba.space`) && Path(`/nextcloud/redeem`)"
+      entryPoints: [https]
+      service: akiba-gate
+      middlewares: [akiba-deny-public]
+      priority: 3000
+      tls:
+        certResolver: letsencrypt
+
+    # --- Jellyfin ---------------------------------------------------------
+    # Идёт через шлюз, а не напрямую в Jellyfin. Причина: автовход кладёт
+    # сессию в localStorage, а тот привязан к origin — значит страница
+    # автовхода и сам Jellyfin обязаны отвечать с одного адреса. Отдать
+    # Jellyfin подпуть силами Traefik можно было бы только выставив в самом
+    # Jellyfin «Base URL», но тогда сменился бы и прямой адрес
+    # http://192.168.8.43:8096/, который решено оставить как есть.
+    # Префикс снимает шлюз.
+    akiba-jellyfin-http:
+      rule: "Host(`inside.akiba.space`) && PathPrefix(`/jellyfin`) && ClientIP(`192.168.8.0/24`)"
+      entryPoints: [http]
+      service: akiba-gate
+      middlewares: [akiba-guard]
+      priority: 2200
+
+    akiba-jellyfin-https:
+      rule: "Host(`inside.akiba.space`) && PathPrefix(`/jellyfin`)"
+      entryPoints: [https]
+      service: akiba-gate
+      middlewares: [akiba-guard]
+      priority: 2000
+      tls:
+        certResolver: letsencrypt
+
+    # Изменение общей учётки Jellyfin закрыто. Приоритет выше, чем у самого
+    # Jellyfin, иначе правило не сработает.
+    #
+    # Про хэш-маршруты отдельно. Закрыть здесь #/login, #/forgotpassword и
+    # #/userprofile невозможно: всё после «#» браузер серверу не отправляет,
+    # и Traefik видит один и тот же «GET /jellyfin/web/» для любого экрана.
+    # Эти экраны закрывает сторож, который шлюз внедряет в саму страницу
+    # веб-клиента, — см. internal/jellyfin/proxy.go.
+    akiba-jellyfin-users-block:
+      rule: "Host(`inside.akiba.space`) && PathPrefix(`/jellyfin/Users/`) && Method(`POST`)"
+      entryPoints: [https]   # только https: по http сюда уходила бы кука авторизации открытым текстом
+      service: akiba-gate
+      middlewares: [akiba-jellyfin-deny-users]
+      priority: 2500
+      tls:
+        certResolver: letsencrypt
+
+    # Исключение из правила выше: обмен подтверждённого кода на сессию.
+    #
+    # Этим запросом заканчивается автовход — браузер меняет подтверждённый
+    # секрет быстрого подключения на токен Jellyfin. Он тоже POST и тоже под
+    # /Users/, поэтому попадает под запрещающее правило; приоритет здесь выше,
+    # чтобы Traefik выбрал этот маршрут.
+    #
+    # Открытым он не остаётся: akiba-guard требует куку резидента, а шлюз
+    # дополнительно сверяет путь со своим списком (internal/jellyfin/proxy.go)
+    # — с нормализацией и без учёта регистра, чего правило Traefik не умеет.
+    akiba-jellyfin-quickconnect:
+      rule: "Host(`inside.akiba.space`) && Path(`/jellyfin/Users/AuthenticateWithQuickConnect`) && Method(`POST`)"
+      entryPoints: [https]   # только https: по http сюда уходила бы кука авторизации открытым текстом
+      service: akiba-gate
+      middlewares: [akiba-guard]
+      priority: 2600
+      tls:
+        certResolver: letsencrypt
+
+    # --- qBittorrent ------------------------------------------------------
+    # Идёт через шлюз, а не напрямую: только там ещё известно, кто добавил
+    # торрент. Префикс снимает сам шлюз.
+    akiba-qbittorrent-http:
+      rule: "Host(`inside.akiba.space`) && PathPrefix(`/qbittorrent`) && ClientIP(`192.168.8.0/24`)"
+      entryPoints: [http]
+      service: akiba-gate
+      middlewares: [akiba-guard]
+      priority: 2200
+
+    akiba-qbittorrent-https:
+      rule: "Host(`inside.akiba.space`) && PathPrefix(`/qbittorrent`)"
+      entryPoints: [https]
+      service: akiba-gate
+      middlewares: [akiba-guard]
+      priority: 2000
+      tls:
+        certResolver: letsencrypt
+
+    # --- Nextcloud --------------------------------------------------------
+    # Вход по одноразовому коду живёт на самом шлюзе (/nextcloud/open и
+    # /nextcloud), отдельного маршрута ему не нужно: он приходит на портал.
+
+    # Обычный Nextcloud — как был, с собственной формой входа.
+    # akiba-strip-identity здесь не для красоты: если в Nextcloud когда-нибудь
+    # включат аутентификацию по заголовку (user_saml, auth proxy), этот
+    # маршрут станет дырой для подделки X-Akiba-Uid.
+    akiba-nextcloud:
+      rule: "Host(`nextcloud.akiba.space`)"
+      entryPoints: [https]
+      service: nextcloud
+      middlewares: [akiba-strip-identity]
+      priority: 1000
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    akiba-gate:
+      loadBalancer:
+        servers:
+          - url: "http://akiba-gate:8080"
+
+    nextcloud:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.8.43:9090"

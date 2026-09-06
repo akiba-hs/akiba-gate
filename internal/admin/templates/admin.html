@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.M.AdminTitle}}</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; padding: 24px;
+    background: #252528; color: #f4f1ec;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center;
+  }
+  .card {
+    width: 100%; max-width: 760px; background: #1f2021;
+    border: 2px solid #b9293b; border-radius: 15px; padding: 28px;
+    box-shadow: 0 4px 10px rgba(185, 41, 59, .4); height: fit-content;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .muted { color: #9a9a9a; font-size: .95rem; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+         margin-bottom: 22px; }
+  .top a { color: #9a9a9a; font-size: .9rem; }
+
+  .notice { border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-size: .95rem; }
+  .notice.err { background: #3a2226; border: 1px solid #b9293b; }
+  .notice.ok  { background: #22301f; border: 1px solid #4a7c3f; }
+
+  /* Список резидентов. Вертикальный, по строке на человека. */
+  .people { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .person {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px 16px; border-radius: 10px;
+    background: #2b2c2e; border: 1px solid #3a3b3d;
+    color: inherit; text-decoration: none;
+    transition: border-color .15s, transform .15s;
+  }
+  a.person:hover { border-color: #b9293b; transform: translateY(-1px); }
+  /* Карточка администратора не нажимается: у него всегда все сервисы. */
+  .person.root { cursor: default; border-style: dashed; }
+  .who { min-width: 0; }
+  .who strong { display: block; font-size: 1.05rem; }
+  .who span { color: #9a9a9a; font-size: .85rem; }
+
+  /* Выданные сервисы — плашками у правого края. Перенос по строкам отдан
+     браузеру: сколько плашек влезет в строку, зависит от ширины экрана. */
+  .granted {
+    flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 6px;
+    justify-content: flex-end; align-items: center;
+  }
+  .granted.none { color: #6d6d6d; font-style: italic; font-size: .85rem; }
+
+  /* Плашка сервиса. Размер у всех одинаковый — различает их цвет. */
+  .tag {
+    display: inline-block; padding: 4px 10px; border-radius: 999px;
+    font-size: .8rem; font-weight: 600; line-height: 1.25;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .tag-jellyfin  { color: #c39bec; background: rgba(154, 106, 214, .16); border-color: rgba(154, 106, 214, .45); }
+  .tag-qbit      { color: #64c8d4; background: rgba(58, 168, 182, .16);  border-color: rgba(58, 168, 182, .45); }
+  .tag-nextcloud { color: #6fb4ef; background: rgba(58, 133, 209, .16);  border-color: rgba(58, 133, 209, .45); }
+  .tag-other     { color: #9a9a9a; background: rgba(154, 154, 154, .14); border-color: rgba(154, 154, 154, .4); }
+
+  /* Права администратора — единственная плашка, дающая власть над доступом
+     остальных. Крупнее, жирнее и в цвет акцента страницы: пропустить её при
+     беглом просмотре списка нельзя. */
+  .tag-admin {
+    color: #ff6b7d; background: rgba(185, 41, 59, .26); border-color: #b9293b;
+    font-size: 1rem; font-weight: 800; padding: 5px 13px;
+    letter-spacing: .01em; text-transform: uppercase;
+  }
+
+  /* Галочки. */
+  .editor { margin-top: 24px; padding-top: 22px; border-top: 1px solid #3a3b3d; }
+  .editor h2 { font-size: 1.1rem; margin-bottom: 4px; }
+  .checks { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 22px; }
+  .check { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+           background: #2b2c2e; border: 1px solid #3a3b3d; border-radius: 8px; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: #b9293b; cursor: pointer; }
+  .actions { display: flex; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-block; border: none; cursor: pointer; text-decoration: none;
+    background: #b9293b; color: #f4f1ec; font-weight: 700;
+    padding: 12px 24px; border-radius: 8px; font-size: 1rem;
+  }
+  .btn:hover { box-shadow: 0 0 15px #b9293b; }
+  .btn.ghost { background: transparent; border: 1px solid #3a3b3d; color: #9a9a9a; font-weight: 600; }
+  .btn.ghost:hover { box-shadow: none; border-color: #9a9a9a; }
+  .empty { padding: 28px 12px; text-align: center; color: #9a9a9a; }
+  @media (prefers-reduced-motion: reduce) { a.person { transition: none; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="top">
+    <div>
+      <h1>{{.M.AdminTitle}}</h1>
+      <p class="muted">{{.M.AdminSubtitle}}</p>
+    </div>
+    <a href="/">{{.M.AdminBackToPortal}}</a>
+  </div>
+
+  {{if .Error}}<p class="notice err">{{.Error}}</p>{{end}}
+  {{if .Saved}}<p class="notice ok">{{.M.AdminSaved}}</p>{{end}}
+
+  {{if .Residents}}
+    <ul class="people">
+      {{range .Residents}}
+        {{if .Root}}
+          <li class="person root">
+            <div class="who">
+              <strong>{{.DisplayName}}</strong>
+              <span>{{if .Username}}@{{.Username}} · {{end}}{{$.M.AdminRootBadge}}</span>
+            </div>
+          </li>
+        {{else}}
+          <li>
+            <a class="person" href="/admin?user={{.TelegramID}}">
+              <div class="who">
+                <strong>{{.DisplayName}}</strong>
+                <span>{{if .Username}}@{{.Username}}{{else}}{{$.M.AdminNoUsername}}{{end}}</span>
+              </div>
+              {{if .Tags}}
+                <div class="granted">
+                  {{range .Tags}}<span class="tag {{.Class}}">{{.Title}}</span>{{end}}
+                </div>
+              {{else}}
+                <div class="granted none">{{$.M.AdminNoServices}}</div>
+              {{end}}
+            </a>
+          </li>
+        {{end}}
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="empty">{{.M.AdminEmpty}}</p>
+  {{end}}
+
+  {{if .Editing}}
+    <section class="editor">
+      <h2>{{.Editing.DisplayName}}</h2>
+      <p class="muted">{{if .Editing.Username}}@{{.Editing.Username}}{{else}}{{.M.AdminNoUsername}}{{end}}</p>
+      <form method="post" action="/admin">
+        <input type="hidden" name="user" value="{{.Editing.TelegramID}}">
+        <div class="checks">
+          {{range .Services}}
+            <label class="check">
+              <input type="checkbox" name="service" value="{{.ID}}" {{if .Checked}}checked{{end}}>
+              <span>{{.Title}}</span>
+            </label>
+          {{end}}
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">{{$.M.AdminSaveButton}}</button>
+          <a class="btn ghost" href="/admin">{{$.M.AdminCancelButton}}</a>
+        </div>
+      </form>
+    </section>
+  {{end}}
+</main>
+</body>
+</html>

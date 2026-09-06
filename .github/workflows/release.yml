@@ -1,0 +1,81 @@
+# Релиз по тегу версии.
+#
+# Запускается, когда на master приходит тег вида v1.2.3 — то есть после
+# слияния develop в master. Тег на другой ветке задание останавливает: релиз
+# должен собираться ровно из того, что лежит в master.
+#
+# Что оказывается в релизе:
+#   * два образа Docker, сохранённые как .tar — под amd64 и arm64;
+#   * архив deploy.zip с каталогом deploy и файлом .env, готовым к правке.
+# Описание релиза берётся из сообщения коммита, на который указывает тег.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Полная история нужна дважды: проверить, что тег на master, и
+          # достать сообщение коммита для описания релиза.
+          fetch-depth: 0
+
+      - name: Проверить, что тег стоит на master
+        run: |
+          if ! git branch --contains "$GITHUB_SHA" --all | grep -qE 'origin/master$|^\* master$|  master$'; then
+            echo "Тег $GITHUB_REF_NAME не на master — релиз не собирается." >&2
+            exit 1
+          fi
+
+      - name: Собрать описание релиза из сообщения коммита
+        id: notes
+        run: |
+          {
+            echo 'body<<RELEASE_NOTES_EOF'
+            git log -1 --pretty=%B "$GITHUB_SHA"
+            echo 'RELEASE_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Собрать образы под amd64 и arm64
+        run: |
+          mkdir -p dist
+          version="${GITHUB_REF_NAME#v}"
+          for arch in amd64 arm64; do
+            docker buildx build \
+              --platform "linux/$arch" \
+              --tag "ghcr.io/${GITHUB_REPOSITORY,,}:$version-$arch" \
+              --output "type=docker,dest=dist/akiba-gate-$version-$arch.tar" \
+              .
+          done
+
+      - name: Собрать архив с deploy и .env
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          rm -rf pkg && mkdir -p pkg
+          cp -r deploy pkg/deploy
+          # .env кладём готовым к правке: тестовые значения и пояснения к
+          # каждому ключу уже внутри.
+          cp deploy/.env.sample pkg/.env
+          rm -f pkg/deploy/.env.sample
+          # Мусор файловых менеджеров в релиз не кладём.
+          (cd pkg && zip -qr "../dist/akiba-gate-$version-deploy.zip" . -x '*.DS_Store')
+
+      - name: Создать релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "${{ steps.notes.outputs.body }}" \
+            dist/*

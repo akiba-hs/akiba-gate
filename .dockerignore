@@ -1,0 +1,7 @@
+.git
+*.md
+deploy
+.env
+*.db
+.local
+bin

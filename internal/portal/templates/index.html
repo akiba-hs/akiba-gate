@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Akiba · сервисы резидентов</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 24px; padding: 24px;
+    background: #252528; color: #f4f1ec;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: 100%; max-width: 640px; background: #1f2021;
+    border: 2px solid #b9293b; border-radius: 15px; padding: 28px;
+    box-shadow: 0 4px 10px rgba(185, 41, 59, .4);
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 6px; }
+  .muted { color: #9a9a9a; font-size: .95rem; }
+  .who { display: flex; align-items: center; gap: 14px; }
+
+  /* Меню аккаунта. Раскрывается по наведению и по фокусу с клавиатуры;
+     место под собой занимает всегда, иначе появление меню дёргало бы вниз
+     карточки сервисов. */
+  .account { position: relative; margin-bottom: 22px; border-radius: 12px;
+             padding: 8px; margin-left: -8px; margin-right: -8px;
+             transition: background-color .15s; }
+  .account:hover, .account:focus-within { background: #2b2c2e; outline: none; }
+  /* Меню ложится прямо на карточку резидента, вровень с ней по высоте и
+     прижатое к её правому краю: имя и аватарка слева остаются на виду, а
+     появление меню не сдвигает ничего ниже по странице.
+     top/bottom вместо высоты — так меню повторяет высоту карточки, какой бы
+     она ни была. */
+  .account .menu {
+    position: absolute; top: 0; right: 0; bottom: 0; z-index: 5;
+    max-width: 100%;
+    /* Строка, а не столбец: кнопки выстраиваются по горизонтали, а stretch
+       выравнивает их по высоте меню — все одинаковые, независимо от длины
+       подписи. */
+    display: flex; flex-direction: row; align-items: stretch; gap: 8px;
+    /* Фон непрозрачный и с тенью: меню перекрывает карточку, и
+       просвечивающий блок читался бы как поломка вёрстки. */
+    background: #26272a; border: 1px solid #3a3b3d; border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, .55);
+    opacity: 0; visibility: hidden; transform: translateX(8px);
+    transition: opacity .15s, transform .15s, visibility .15s;
+  }
+  .account:hover .menu, .account:focus-within .menu {
+    opacity: 1; visibility: visible; transform: translateX(0);
+  }
+  /* Форма — такой же элемент строки, как и кнопка вне формы: без этого
+     обёртка не растянулась бы, и кнопка внутри неё оказалась бы ниже
+     соседних. */
+  .account .menu form { display: flex; }
+  .account .menu .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 100%; padding: 0 22px; white-space: nowrap;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .account, .account .menu { transition: none; }
+  }
+  .who img { width: 52px; height: 52px; border-radius: 50%; border: 2px solid #b9293b;
+             display: block; }
+
+  /* Аватарка приезжает из Telegram, иногда через SOCKS5, и задержка в
+     полсекунды-секунду — обычное дело. Без заглушки на её месте до загрузки
+     пустота, и имя рядом прыгает вбок, когда картинка наконец встаёт.
+     Рамка и размер повторяют саму картинку, чтобы подмены не было видно. */
+  .avatar { position: relative; flex: 0 0 auto; width: 52px; height: 52px; }
+  /* Размер и рамка те же, что у картинки, — иначе в момент загрузки видно,
+     как кружок подрастает и обзаводится каймой. */
+  .avatar.pending { border-radius: 50%; background: #2b2c2e;
+                    border: 2px solid #b9293b; }
+  /* Мерцание включаем только на время ожидания: постоянная анимация в
+     углу страницы отвлекает и зря будит видеокарту. */
+  .avatar.pending::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: linear-gradient(100deg, transparent 20%, #3a3b3d 50%, transparent 80%);
+    background-size: 220% 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+  /* Картинку прячем, только пока скелетон включён: без JS класс pending не
+     появится, и аватарка покажется как раньше, без всяких условий. */
+  .avatar.pending img { opacity: 0; }
+  .avatar img { transition: opacity .2s; }
+  @keyframes shimmer {
+    from { background-position: 120% 0; }
+    to   { background-position: -120% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .avatar.pending::after { animation: none; }
+    .avatar img { transition: none; }
+  }
+  .services { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  a.service {
+    display: block; padding: 16px; border-radius: 10px; text-decoration: none;
+    background: #2b2c2e; color: #f4f1ec; border: 1px solid #3a3b3d;
+    transition: border-color .15s, transform .15s;
+  }
+  a.service:hover { border-color: #b9293b; transform: translateY(-2px); }
+  a.service strong { display: block; font-size: 1.05rem; }
+  a.service span { color: #9a9a9a; font-size: .85rem; }
+  .btn {
+    display: inline-block; border: none; cursor: pointer; text-decoration: none;
+    background: #b9293b; color: #f4f1ec; font-weight: 700;
+    padding: 12px 24px; border-radius: 8px; font-size: 1rem;
+  }
+  .btn:hover { box-shadow: 0 0 15px #b9293b; }
+  .warn { border-color: #d08a1e; }
+  .cheer { text-align: center; padding: 28px 12px; font-size: 1.25rem; font-weight: 700; }
+</style>
+</head>
+<body>
+<main class="card{{if or .Error .CanonicalURL}} warn{{end}}">
+  {{if .CanonicalURL}}
+    <p><strong>{{.M.WrongHostTitle}}</strong> {{.M.WrongHostText}}
+       <a href="{{.CanonicalURL}}">{{.CanonicalURL}}</a></p>
+  {{end}}
+  {{if .Authenticated}}
+    <!-- Карточка резидента раскрывает меню при наведении и при фокусе с
+         клавиатуры. tabindex нужен именно для второго: без него до кнопки
+         выхода не добраться иначе как мышью. -->
+    <div class="account" tabindex="0">
+      <div class="who">
+        {{if .PhotoURL}}
+          <!-- referrerpolicy нужен только для прямой ссылки: иначе Telegram
+               узнаёт адрес портала из Referer. Через шлюз запрос собирается
+               с нуля, и утечки нет по построению. -->
+          <div class="avatar" id="avatar">
+            <img src="{{.PhotoURL}}" alt="" width="52" height="52"
+                 {{if not .PhotoProxied}}referrerpolicy="no-referrer"{{end}}>
+          </div>
+        {{end}}
+        <div>
+          <h1>{{.DisplayName}}</h1>
+          <p class="muted">{{if .Username}}@{{.Username}} · {{end}}{{if .IsResident}}{{.M.ResidentBadge}}{{else}}{{.M.NotResidentBadge}}{{end}}</p>
+        </div>
+      </div>
+      <div class="menu">
+        <form action="{{.LogoutURL}}" method="post"><button class="btn" type="submit">{{.M.LogoutButton}}</button></form>
+      </div>
+    </div>
+    {{if .PhotoURL}}
+    <script>
+    // Скелетон включаем из скрипта, а не в разметке: снять его тоже некому,
+    // кроме скрипта, и при выключенном JS страница осталась бы с вечно
+    // мерцающим кружком вместо загрузившейся аватарки.
+    (function () {
+      var box = document.getElementById('avatar');
+      if (!box) { return; }
+      var img = box.querySelector('img');
+      if (!img) { return; }
+      // Картинка могла прийти из кэша ещё до этого скрипта. Проверяем именно
+      // complete, без naturalWidth: у уже провалившейся загрузки события
+      // load и error тоже отыграли, и подписка ниже не сняла бы скелетон
+      // никогда — остался бы вечно мерцающий кружок.
+      if (img.complete) { return; }
+      box.classList.add('pending');
+      var done = function () { box.classList.remove('pending'); };
+      // Ошибку гасим так же: Telegram недоступен — лучше пустое место, чем
+      // бесконечное ожидание.
+      img.addEventListener('load', done);
+      img.addEventListener('error', done);
+    })();
+    </script>
+    {{end}}
+
+    {{if .Services}}
+      <div class="services">
+        {{range .Services}}
+          <a class="service" href="{{.URL}}"><strong>{{.Title}}</strong><span>{{.Description}}</span></a>
+        {{end}}
+      </div>
+    {{else if .IsResident}}
+      <p class="cheer">{{.M.NoServices}}</p>
+    {{else}}
+      {{if .Error}}<p>{{.Error}}</p>{{else}}<p>{{.M.NotResidentError}}</p>{{end}}
+    {{end}}
+  {{else}}
+    <h1>{{.M.PortalTitle}}</h1>
+    <p class="muted" style="margin:10px 0 22px">
+      {{if .Error}}{{.Error}}{{else}}{{.M.PortalSubtitle}}{{end}}
+    </p>
+    {{if .CanonicalURL}}
+      <a class="btn" href="{{.CanonicalURL}}">{{.CanonicalURL}}</a>
+    {{else if .ReturnsElsewhere}}
+      <a class="btn" href="{{.LoginURL}}" target="_blank" rel="noopener">{{.M.LoginButton}}</a>
+      <p class="muted" style="margin-top:14px" id="waiting">{{.M.ReturnsElsewhere}}</p>
+      <script>
+      // Кука авторизации выдаётся на весь домен и до портала доходит, даже
+      // когда возврат ушёл на чужой адрес. Значит достаточно спрашивать, не
+      // появилась ли она, — и обновиться, как только вход состоялся.
+      (function () {
+        var tries = 0;
+        var timer = setInterval(function () {
+          if (++tries > 150) { clearInterval(timer); return; } // ~5 минут
+          fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (me) {
+              if (me && me.authenticated) { clearInterval(timer); location.reload(); }
+            })
+            .catch(function () {});
+        }, 2000);
+      })();
+      </script>
+    {{else}}
+      <a class="btn" href="{{.LoginURL}}">{{.M.LoginButton}}</a>
+    {{end}}
+  {{end}}
+</main>
+</body>
+</html>
